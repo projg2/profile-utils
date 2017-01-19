@@ -1,0 +1,16 @@
+#!/bin/bash
+# make 'children' files having reverse mapping of parents
+
+find -name children -delete
+while read x; do
+	p=${x%/*}
+	(
+		cd "${p}"
+		while read y; do
+			(
+				cd "${y}"
+				echo "${p}" >> children
+			)
+		done <parent
+	)
+done < <(find -name parent)
