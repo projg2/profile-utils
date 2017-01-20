@@ -18,7 +18,7 @@ def process_file(fp):
 				pkg = pkg[1:]
 
 			if pkg not in r:
-				print('%s: %s' % (os.path.relpath(fp, r.path), pkg))
+				print('%s : %s' % (os.path.relpath(fp, r.path), pkg))
 
 
 for dirpath, dirnames, filenames in os.walk(os.path.join(r.path, 'profiles')):

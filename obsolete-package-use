@@ -22,7 +22,7 @@ def process_file(fp):
 					if f.lstrip('+-') in p.use:
 						break
 				else: # not found or no packages match
-					print('%s: %s %s' % (os.path.relpath(fp, r.path), pkg, f))
+					print('%s : %s %s' % (os.path.relpath(fp, r.path), pkg, f))
 
 
 for dirpath, dirnames, filenames in os.walk(os.path.join(r.path, 'profiles')):
