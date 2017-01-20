@@ -1,0 +1,37 @@
+#!/usr/bin/env python
+
+import os
+
+import gentoopm
+
+pm = gentoopm.get_package_manager()
+r = pm.repositories['gentoo']
+
+all_flags = set()
+# add arch flags
+with open(os.path.join(r.path, 'profiles', 'arch.list'), 'r', encoding='utf8') as f:
+	for l in f:
+		if l.startswith('#') or not l.strip():
+			continue
+		l = l.strip()
+		all_flags.add(l)
+for p in r:
+	all_flags |= p.use
+
+def process_file(fp):
+	with open(fp, 'r', encoding='utf8') as f:
+		for l in f:
+			if l.startswith('#') or not l.strip():
+				continue
+			flag = l.strip()
+			if flag[0] == '-':
+				flag = flag[1:]
+
+			if flag not in all_flags:
+				print('%s : %s' % (os.path.relpath(fp, r.path), flag))
+
+
+for dirpath, dirnames, filenames in os.walk(os.path.join(r.path, 'profiles')):
+	for f in ('use.mask', 'use.force', 'use.stable.mask', 'use.stable.force'):
+		if f in filenames:
+			process_file(os.path.join(dirpath, f))
