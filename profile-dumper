@@ -33,7 +33,7 @@ def parse_package_use_file(f, cb):
 var_regex = re.compile(r'[$](?P<brace>[{])(?P<var>[A-Z0-9]*)(?(brace)[}])')
 
 
-def parse_make_conf(f, cb):
+def parse_make_conf(f, cb, prev_vals):
 	def wrap_shlex(it):
 		while True:
 			it = iter(it)
@@ -54,7 +54,11 @@ def parse_make_conf(f, cb):
 			if not m:
 				break
 			# substitute var ref
-			v = v[0:m.start()] + data[m.group('var')] + v[m.end():]
+			if m.group('var') in data:
+				rv = data[m.group('var')]
+			else:
+				rv = prev_vals[m.group('var')]
+			v = v[0:m.start()] + rv + v[m.end():]
 		data[k] = v
 	cb(data)
 
@@ -113,6 +117,9 @@ class CombinedProfile(object):
 			else:
 				self.db_[fn][k] = v
 
+	def make_conf_dict(self, fn):
+		return self.db_.get(fn, {})
+
 	def dump_all(self, d):
 		for fn, data in self.db_.items():
 			if data:
@@ -161,7 +168,10 @@ def process_profile(profile_path, visitor):
 
 		try:
 			with open(os.path.join(profile_path, fn), 'r', encoding='utf8') as f:
-				pf(f, cb)
+				if pf == parse_make_conf:
+					pf(f, cb, visitor.make_conf_dict(fn))
+				else:
+					pf(f, cb)
 		except OSError as e:
 			if e.errno != errno.ENOENT:
 				raise
