@@ -4,6 +4,8 @@ import errno
 import functools
 import os
 import os.path
+import re
+import shlex
 import sys
 
 import gentoopm
@@ -28,7 +30,37 @@ def parse_package_use_file(f, cb):
 			cb(pkg, fl)
 
 
+var_regex = re.compile(r'[$](?P<brace>[{])(?P<var>[A-Z0-9]*)(?(brace)[}])')
+
+
+def parse_make_conf(f, cb):
+	def wrap_shlex(it):
+		while True:
+			it = iter(it)
+			try:
+				k = next(it)
+			except StopIteration:
+				return
+			eq = next(it)
+			v = next(it)
+			assert eq == '='
+			yield (k, v)
+
+	data = {}
+	lex = shlex.shlex(f, posix=True)
+	for k, v in wrap_shlex(lex):
+		while True:
+			m = var_regex.search(v)
+			if not m:
+				break
+			# substitute var ref
+			v = v[0:m.start()] + data[m.group('var')] + v[m.end():]
+		data[k] = v
+	cb(data)
+
+
 parsers = {}
+parsers['make.defaults'] = parse_make_conf
 for fn in ('packages', 'packages.build', 'package.mask', 'package.provided'):
 	parsers[fn] = parse_line_file
 for fn in ('use.force', 'use.mask', 'use.stable.force', 'use.stable.mask'):
@@ -36,11 +68,14 @@ for fn in ('use.force', 'use.mask', 'use.stable.force', 'use.stable.mask'):
 for fn in ('package.use', 'package.use.force', 'package.use.mask',
 		'package.use.stable.force', 'package.use.stable.mask'):
 	parsers[fn] = parse_package_use_file
-# TODO: make.defaults
 
 
 class CombinedProfile(object):
 	db_ = {}
+
+	incr_vars = ('USE', 'USE_EXPAND', 'USE_EXPAND_HIDDEN',
+			'CONFIG_PROTECT', 'CONFIG_PROTECT_MASK', 'IUSE_IMPLICIT',
+			'USE_EXPAND_IMPLICIT', 'USE_EXPAND_UNPREFIXED')
 
 	@staticmethod
 	def handle_entry(s, x):
@@ -65,6 +100,19 @@ class CombinedProfile(object):
 			self.db_[fn][pkg] = set()
 		self.handle_entry(self.db_[fn][pkg], f)
 
+	def handle_make_conf(self, fn, data):
+		if fn not in self.db_:
+			self.db_[fn] = {}
+		for k, v in data.items():
+			if k in self.incr_vars:
+				newv = set(self.db_[fn].get(k, '').split())
+				# handle +/- logic
+				for f in v.split():
+					self.handle_entry(newv, f)
+				self.db_[fn][k] = ' '.join(sorted(newv))
+			else:
+				self.db_[fn][k] = v
+
 	def dump_all(self, d):
 		for fn, data in self.db_.items():
 			if data:
@@ -74,9 +122,13 @@ class CombinedProfile(object):
 							f.write('%s\n' % l)
 					elif isinstance(data, dict):
 						for key, values in sorted(data.items()):
-							if not values:
-								continue
-							f.write('%s %s\n' % (key, ' '.join(sorted(values))))
+							if isinstance(values, set): # package.use*
+								if not values:
+									continue
+								f.write('%s %s\n' % (key, ' '.join(sorted(values))))
+							else: # make.defaults
+								assert '"' not in values
+								f.write('%s="%s"\n' % (key, values))
 					else:
 						raise NotImplementedError(pf)
 
@@ -102,6 +154,8 @@ def process_profile(profile_path, visitor):
 				cb = functools.partial(visitor.handle_pkg, fn)
 		elif pf == parse_package_use_file:
 			cb = functools.partial(visitor.handle_pkg_use, fn)
+		elif pf == parse_make_conf:
+			cb = functools.partial(visitor.handle_make_conf, fn)
 		else:
 			raise NotImplementedError(pf)
 
