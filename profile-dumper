@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import errno
+import functools
 import os
 import os.path
 import sys
@@ -39,113 +40,45 @@ for fn in ('package.use', 'package.use.force', 'package.use.mask',
 
 
 class CombinedProfile(object):
-	packages_ = set()
-	packages_build_ = set()
-	package_mask_ = set()
-	package_provided_ = set()
-	use_force_ = set()
-	use_mask_ = set()
-	use_stable_force_ = set()
-	use_stable_mask_ = set()
-	package_use_ = {}
-	package_use_force_ = {}
-	package_use_mask_ = {}
-	package_use_stable_force_ = {}
-	package_use_stable_mask_ = {}
+	db_ = {}
 
-	def packages(self, p):
-		self.packages_.add(p)
-
-	def packages_build(self, p):
-		self.packages_build_.add(p)
-
-	def package_mask(self, p):
-		if p.startswith('-'):
-			self.package_mask_.discard(p[1:])
+	@staticmethod
+	def handle_entry(s, x):
+		if x.startswith('-'):
+			s.discard(x[1:])
 		else:
-			self.package_mask_.add(p)
+			s.add(x)
 
-	def use_force(self, f):
-		if f.startswith('-'):
-			self.use_force_.discard(f[1:])
-		else:
-			self.use_force_.add(f)
+	def handle_pkg(self, fn, p):
+		if fn not in self.db_:
+			self.db_[fn] = set()
+		self.handle_entry(self.db_[fn], p)
 
-	def use_mask(self, f):
-		if f.startswith('-'):
-			self.use_mask_.discard(f[1:])
-		else:
-			self.use_mask_.add(f)
+	def handle_use(self, fn, f):
+		# same way as packages
+		self.handle_pkg(fn, f)
 
-	def use_stable_force(self, f):
-		if f.startswith('-'):
-			self.use_stable_force_.discard(f[1:])
-		else:
-			self.use_stable_force_.add(f)
-
-	def use_stable_mask(self, f):
-		if f.startswith('-'):
-			self.use_stable_mask_.discard(f[1:])
-		else:
-			self.use_stable_mask_.add(f)
-
-	def package_use(self, pkg, f):
-		if pkg not in self.package_use_:
-			self.package_use_[pkg] = set()
-		if f.startswith('-'):
-			self.package_use_[pkg].discard(f[1:])
-		else:
-			self.package_use_[pkg].add(f)
-
-	def package_use_force(self, pkg, f):
-		if pkg not in self.package_use_force_:
-			self.package_use_force_[pkg] = set()
-		if f.startswith('-'):
-			self.package_use_force_[pkg].discard(f[1:])
-		else:
-			self.package_use_force_[pkg].add(f)
-
-	def package_use_mask(self, pkg, f):
-		if pkg not in self.package_use_mask_:
-			self.package_use_mask_[pkg] = set()
-		if f.startswith('-'):
-			self.package_use_mask_[pkg].discard(f[1:])
-		else:
-			self.package_use_mask_[pkg].add(f)
-
-	def package_use_stable_force(self, pkg, f):
-		if pkg not in self.package_use_stable_force_:
-			self.package_use_stable_force_[pkg] = set()
-		if f.startswith('-'):
-			self.package_use_stable_force_[pkg].discard(f[1:])
-		else:
-			self.package_use_stable_force_[pkg].add(f)
-
-	def package_use_stable_mask(self, pkg, f):
-		if pkg not in self.package_use_stable_mask_:
-			self.package_use_stable_mask_[pkg] = set()
-		if f.startswith('-'):
-			self.package_use_stable_mask_[pkg].discard(f[1:])
-		else:
-			self.package_use_stable_mask_[pkg].add(f)
+	def handle_pkg_use(self, fn, pkg, f):
+		if fn not in self.db_:
+			self.db_[fn] = {}
+		if pkg not in self.db_[fn]:
+			self.db_[fn][pkg] = set()
+		self.handle_entry(self.db_[fn][pkg], f)
 
 	def dump_all(self, d):
-		for fn, pf in parsers.items():
-			db_name = fn.replace('.', '_') + '_'
-			db = getattr(self, db_name)
-			if db:
+		for fn, data in self.db_.items():
+			if data:
 				with open(os.path.join(d, fn), 'w', encoding='utf8') as f:
-					if pf == parse_line_file:
-						for l in sorted(db):
+					if isinstance(data, set):
+						for l in sorted(data):
 							f.write('%s\n' % l)
-					elif pf == parse_package_use_file:
-						for pkg, flags in sorted(db.items()):
-							if not flags:
+					elif isinstance(data, dict):
+						for key, values in sorted(data.items()):
+							if not values:
 								continue
-							f.write('%s %s\n' % (pkg, ' '.join(sorted(flags))))
+							f.write('%s %s\n' % (key, ' '.join(sorted(values))))
 					else:
 						raise NotImplementedError(pf)
-					
 
 
 def process_profile(profile_path, visitor):
@@ -162,9 +95,18 @@ def process_profile(profile_path, visitor):
 			raise
 
 	for fn, pf in parsers.items():
+		if pf == parse_line_file:
+			if fn.startswith('use.'):
+				cb = functools.partial(visitor.handle_use, fn)
+			else:
+				cb = functools.partial(visitor.handle_pkg, fn)
+		elif pf == parse_package_use_file:
+			cb = functools.partial(visitor.handle_pkg_use, fn)
+		else:
+			raise NotImplementedError(pf)
+
 		try:
 			with open(os.path.join(profile_path, fn), 'r', encoding='utf8') as f:
-				cb = getattr(visitor, fn.replace('.', '_'))
 				pf(f, cb)
 		except OSError as e:
 			if e.errno != errno.ENOENT:
