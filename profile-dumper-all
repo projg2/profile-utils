@@ -75,11 +75,12 @@ for fn in ('package.use', 'package.use.force', 'package.use.mask',
 
 
 class CombinedProfile(object):
-	db_ = {}
-
 	incr_vars = ('USE', 'USE_EXPAND', 'USE_EXPAND_HIDDEN',
 			'CONFIG_PROTECT', 'CONFIG_PROTECT_MASK', 'IUSE_IMPLICIT',
 			'USE_EXPAND_IMPLICIT', 'USE_EXPAND_UNPREFIXED')
+
+	def __init__(self):
+		self.db_ = {}
 
 	@staticmethod
 	def handle_entry(s, x):
