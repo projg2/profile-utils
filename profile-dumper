@@ -57,7 +57,7 @@ def parse_make_conf(f, cb, prev_vals):
 			if m.group('var') in data:
 				rv = data[m.group('var')]
 			else:
-				rv = prev_vals[m.group('var')]
+				rv = prev_vals.get(m.group('var'), '')
 			v = v[0:m.start()] + rv + v[m.end():]
 		data[k] = v
 	cb(data)
