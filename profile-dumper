@@ -134,8 +134,6 @@ class CombinedProfile(object):
 
 
 def process_profile(profile_path, visitor):
-	print(os.path.abspath(profile_path))
-
 	# start by recurring into parent profiles
 	try:
 		with open(os.path.join(profile_path, 'parent'), 'r') as f:
@@ -145,6 +143,8 @@ def process_profile(profile_path, visitor):
 	except OSError as e:
 		if e.errno != errno.ENOENT:
 			raise
+
+	print(os.path.abspath(profile_path))
 
 	for fn, pf in parsers.items():
 		if pf == parse_line_file:
