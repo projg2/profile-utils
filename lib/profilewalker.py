@@ -10,19 +10,19 @@ import shlex
 
 class ProfileVisitor(abc.ABC):
     @abc.abstractmethod
-    def handle_pkg(self, fn, p):
+    def handle_pkg(self, fn, p, path):
         pass
 
     @abc.abstractmethod
-    def handle_use(self, fn, f):
+    def handle_use(self, fn, f, path):
         pass
 
     @abc.abstractmethod
-    def handle_pkg_use(self, fn, pkg, f):
+    def handle_pkg_use(self, fn, pkg, f, path):
         pass
 
     @abc.abstractmethod
-    def handle_make_conf(self, fn, data):
+    def handle_make_conf(self, fn, data, path):
         pass
 
     @abc.abstractmethod
@@ -107,18 +107,20 @@ def process_profile(profile_path, visitor, verbose=True):
     for fn, pf in parsers.items():
         if pf == parse_line_file:
             if fn.startswith('use.'):
-                cb = functools.partial(visitor.handle_use, fn)
+                cb = visitor.handle_use
             else:
-                cb = functools.partial(visitor.handle_pkg, fn)
+                cb = visitor.handle_pkg
         elif pf == parse_package_use_file:
-            cb = functools.partial(visitor.handle_pkg_use, fn)
+            cb = visitor.handle_pkg_use
         elif pf == parse_make_conf:
-            cb = functools.partial(visitor.handle_make_conf, fn)
+            cb = visitor.handle_make_conf
         else:
             raise NotImplementedError(pf)
+        path = os.path.join(profile_path, fn)
+        cb = functools.partial(cb, fn, path=path)
 
         try:
-            with open(os.path.join(profile_path, fn), 'r', encoding='utf8') as f:
+            with open(path, 'r', encoding='utf8') as f:
                 if pf == parse_make_conf:
                     pf(f, cb, visitor.make_conf_dict(fn))
                 else:
@@ -143,24 +145,24 @@ class CombinedProfile(ProfileVisitor):
         else:
             s.add(x)
 
-    def handle_pkg(self, fn, p):
+    def handle_pkg(self, fn, p, path):
         if fn not in self.db_:
             self.db_[fn] = set()
         self.handle_entry(self.db_[fn], p)
 
-    def handle_use(self, fn, f):
+    def handle_use(self, fn, f, path):
         if fn not in self.db_:
             self.db_[fn] = set()
         self.handle_entry(self.db_[fn], f)
 
-    def handle_pkg_use(self, fn, pkg, f):
+    def handle_pkg_use(self, fn, pkg, f, path):
         if fn not in self.db_:
             self.db_[fn] = {}
         if pkg not in self.db_[fn]:
             self.db_[fn][pkg] = set()
         self.handle_entry(self.db_[fn][pkg], f)
 
-    def handle_make_conf(self, fn, data):
+    def handle_make_conf(self, fn, data, path):
         if fn not in self.db_:
             self.db_[fn] = {}
         for k, v in data.items():
