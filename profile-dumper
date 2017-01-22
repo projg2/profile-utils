@@ -5,14 +5,8 @@ import os
 import os.path
 import sys
 
-import gentoopm
-
 sys.path.append('lib')
 import profilewalker
-
-
-pm = gentoopm.get_package_manager()
-r = pm.repositories['gentoo']
 
 
 def main(profile_path, output_dir):
