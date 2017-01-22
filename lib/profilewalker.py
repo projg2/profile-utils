@@ -36,7 +36,7 @@ def parse_package_use_file(f, cb):
             cb(pkg, fl)
 
 
-var_regex = re.compile(r'[$](?P<brace>[{])(?P<var>[A-Z0-9]*)(?(brace)[}])')
+var_regex = re.compile(r'[$](?P<brace>[{])(?P<var>[A-Za-z0-9_]*)(?(brace)[}])')
 
 
 def parse_make_conf(f, cb, prev_vals):
