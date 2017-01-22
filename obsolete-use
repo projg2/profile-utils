@@ -13,27 +13,35 @@ r = pm.repositories['gentoo']
 
 
 all_flags = set()
-# add arch flags
-with open(os.path.join(r.path, 'profiles', 'arch.list'), 'r', encoding='utf8') as f:
-	for l in f:
-		if l.startswith('#') or not l.strip():
-			continue
-		l = l.strip()
-		all_flags.add(l)
 for p in r:
 	all_flags |= p.use
 
 
 class ObsoleteUseScanner(profilewalker.ProfileVisitor):
+	def __init__(self, implicit_flags):
+		self.implicit_flags = implicit_flags
+
 	def handle_use(self, fn, f, path):
 		if f.startswith('-'):
 			f = f[1:]
 
-		if f not in all_flags:
+		if f not in self.implicit_flags and not f in all_flags:
 			print('%s : %s' % (os.path.relpath(path, r.path), f))
 
 
-p = ObsoleteUseScanner()
-
 for dirpath, dirnames, filenames in os.walk(os.path.join(r.path, 'profiles')):
+	# first build up a reference profile for IUSE_IMPLICIT and friends
+	rp = profilewalker.CombinedProfile()
+	profilewalker.process_profile(dirpath, rp, verbose=False)
+
+	makedef = rp.db_.get('make.defaults', {})
+	iuse_implicit = set(makedef.get('IUSE_IMPLICIT', '').split())
+	unprefixed = makedef.get('USE_EXPAND_UNPREFIXED', '').split()
+	for k in makedef.get('USE_EXPAND_IMPLICIT', '').split():
+		vals = makedef['USE_EXPAND_VALUES_' + k].split()
+		if k not in unprefixed:
+			vals = [k.lower() + '_' + x for x in vals]
+		iuse_implicit.update(vals)
+
+	p = ObsoleteUseScanner(iuse_implicit)
 	profilewalker.process_profile(dirpath, p, verbose=False, recursive=False)
