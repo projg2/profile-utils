@@ -149,8 +149,9 @@ class CombinedProfile(ProfileVisitor):
         self.handle_entry(self.db_[fn], p)
 
     def handle_use(self, fn, f):
-        # same way as packages
-        self.handle_pkg(fn, f)
+        if fn not in self.db_:
+            self.db_[fn] = set()
+        self.handle_entry(self.db_[fn], f)
 
     def handle_pkg_use(self, fn, pkg, f):
         if fn not in self.db_:

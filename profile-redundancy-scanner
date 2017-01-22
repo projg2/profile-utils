@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+
+import errno
+import os
+import os.path
+import sys
+
+import gentoopm
+
+sys.path.append('lib')
+import profilewalker
+
+
+pm = gentoopm.get_package_manager()
+r = pm.repositories['gentoo']
+
+
+class RedundancyScanningProfile(profilewalker.CombinedProfile):
+	@staticmethod
+	def is_redundant(s, x):
+		if x.startswith('-'):
+			return x[1:] not in s
+		else:
+			return x in s
+
+	def handle_pkg(self, fn, p):
+		if self.is_redundant(self.db_.get(fn, ()), p):
+			print('%s: %s' % (fn, p))
+		super(RedundancyScanningProfile, self).handle_pkg(fn, p)
+
+	# TODO: use.stable* entries can use - to override package.use
+
+	def handle_use(self, fn, f):
+		if self.is_redundant(self.db_.get(fn, ()), f):
+			print('%s: %s' % (fn, f))
+		super(RedundancyScanningProfile, self).handle_use(fn, f)
+
+	# TODO: package.use entries require explicit -/+ status
+	# TODO: package.use.stable* entries can use - to override package.use
+
+	def handle_pkg_use(self, fn, pkg, f):
+		if self.is_redundant(self.db_.get(fn, {}).get(pkg, ()), f):
+			print('%s: %s %s' % (fn, pkg, f))
+		super(RedundancyScanningProfile, self).handle_pkg_use(fn, pkg, f)
+
+	def handle_make_conf(self, fn, data):
+		for k, v in data.items():
+			if k in self.incr_vars:
+				oldv = self.db_.get(fn, {}).get(k, '').split()
+				for newv in v.split():
+					if self.is_redundant(oldv, newv):
+						print('%s: %s %s' % (fn, k, newv))
+			else:
+				if self.db_.get(fn, {}).get(k, None) == v:
+					print('%s: %s %s' % (fn, k, v))
+		super(RedundancyScanningProfile, self).handle_make_conf(fn, data)
+
+
+def main(profile_path):
+	p = RedundancyScanningProfile()
+	profilewalker.process_profile(profile_path, p)
+
+	return 0
+
+
+if __name__ == '__main__':
+	sys.exit(main(*sys.argv[1:]))
