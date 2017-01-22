@@ -1,6 +1,5 @@
 # code for profile walking with visitors
 
-import abc
 import errno
 import functools
 import os.path
@@ -8,26 +7,17 @@ import re
 import shlex
 
 
-class ProfileVisitor(abc.ABC):
-    @abc.abstractmethod
-    def handle_pkg(self, fn, p, path):
-        pass
+class ProfileVisitor(object):
+    #def handle_pkg(self, fn, p, path):
 
-    @abc.abstractmethod
-    def handle_use(self, fn, f, path):
-        pass
+    #def handle_use(self, fn, f, path):
 
-    @abc.abstractmethod
-    def handle_pkg_use(self, fn, pkg, f, path):
-        pass
+    #def handle_pkg_use(self, fn, pkg, f, path):
 
-    @abc.abstractmethod
-    def handle_make_conf(self, fn, data, path):
-        pass
+    #def handle_make_conf(self, fn, data, path):
 
-    @abc.abstractmethod
     def make_conf_dict(self, fn):
-        pass
+        return {}
 
 
 def parse_line_file(f, cb):
@@ -90,16 +80,17 @@ for fn in ('package.use', 'package.use.force', 'package.use.mask',
     parsers[fn] = parse_package_use_file
 
 
-def process_profile(profile_path, visitor, verbose=True):
-    # start by recurring into parent profiles
-    try:
-        with open(os.path.join(profile_path, 'parent'), 'r') as f:
-            for l in f:
-                l = l.strip()
-                process_profile(os.path.join(profile_path, l), visitor, verbose)
-    except OSError as e:
-        if e.errno != errno.ENOENT:
-            raise
+def process_profile(profile_path, visitor, verbose=True, recursive=True):
+    if recursive:
+        # start by recurring into parent profiles
+        try:
+            with open(os.path.join(profile_path, 'parent'), 'r') as f:
+                for l in f:
+                    l = l.strip()
+                    process_profile(os.path.join(profile_path, l), visitor, verbose)
+        except OSError as e:
+            if e.errno != errno.ENOENT:
+                raise
 
     if verbose:
         print(os.path.abspath(profile_path))
@@ -107,17 +98,20 @@ def process_profile(profile_path, visitor, verbose=True):
     for fn, pf in parsers.items():
         if pf == parse_line_file:
             if fn.startswith('use.'):
-                cb = visitor.handle_use
+                cb = 'handle_use'
             else:
-                cb = visitor.handle_pkg
+                cb = 'handle_pkg'
         elif pf == parse_package_use_file:
-            cb = visitor.handle_pkg_use
+            cb = 'handle_pkg_use'
         elif pf == parse_make_conf:
-            cb = visitor.handle_make_conf
+            cb = 'handle_make_conf'
         else:
             raise NotImplementedError(pf)
+        # skip files visitor does not care about
+        if not hasattr(visitor, cb):
+            continue
         path = os.path.join(profile_path, fn)
-        cb = functools.partial(cb, fn, path=path)
+        cb = functools.partial(getattr(visitor, cb), fn, path=path)
 
         try:
             with open(path, 'r', encoding='utf8') as f:
