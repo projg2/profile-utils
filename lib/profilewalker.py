@@ -131,62 +131,80 @@ class CombinedProfile(ProfileVisitor):
 
     def __init__(self):
         self.db_ = {}
+        self.db_dumps_ = {}
 
     @staticmethod
     def handle_entry(s, x):
         if x.startswith('-'):
-            s.discard(x[1:])
+            s[x[1:]] = False
         else:
-            s.add(x)
+            s[x] = True
 
     def handle_pkg(self, fn, p, path):
         if fn not in self.db_:
-            self.db_[fn] = set()
+            self.db_[fn] = {}
+            self.db_dumps_[fn] = self.dump_pkg_or_use
         self.handle_entry(self.db_[fn], p)
 
     def handle_use(self, fn, f, path):
         if fn not in self.db_:
-            self.db_[fn] = set()
+            self.db_[fn] = {}
+            self.db_dumps_[fn] = self.dump_pkg_or_use
         self.handle_entry(self.db_[fn], f)
 
     def handle_pkg_use(self, fn, pkg, f, path):
         if fn not in self.db_:
             self.db_[fn] = {}
+            self.db_dumps_[fn] = self.dump_pkg_use
         if pkg not in self.db_[fn]:
-            self.db_[fn][pkg] = set()
+            self.db_[fn][pkg] = {}
         self.handle_entry(self.db_[fn][pkg], f)
 
     def handle_make_conf(self, fn, data, path):
         if fn not in self.db_:
             self.db_[fn] = {}
+            self.db_dumps_[fn] = self.dump_make_conf
         for k, v in data.items():
             if k in self.incr_vars:
-                newv = set(self.db_[fn].get(k, '').split())
+                if k not in self.db_[fn]:
+                    self.db_[fn][k] = {}
                 # handle +/- logic
                 for f in v.split():
-                    self.handle_entry(newv, f)
-                self.db_[fn][k] = ' '.join(sorted(newv))
+                    self.handle_entry(self.db_[fn][k], f)
             else:
                 self.db_[fn][k] = v
 
     def make_conf_dict(self, fn):
         return self.db_.get(fn, {})
 
+    @staticmethod
+    def flag_to_str(k, v):
+        return '%s%s' % ('' if v else '-', k)
+
+    @classmethod
+    def dump_pkg_or_use(self, f, data):
+        for k, v in sorted(data.items()):
+            f.write('%s\n' % self.flag_to_str(k, v))
+
+    @classmethod
+    def dump_pkg_use(self, f, data):
+        for key, flags in sorted(data.items()):
+            f.write('%s %s\n' % (key, ' '.join(
+                self.flag_to_str(k, v) for k, v in sorted(flags.items()))))
+
+    @classmethod
+    def dump_make_conf(self, f, data):
+        for key, value in sorted(data.items()):
+            if isinstance(value, dict):
+                f.write('%s="%s"\n' % (key, ' '.join(
+                    self.flag_to_str(k, v) for k, v in sorted(value.items()))))
+            else:
+                assert '"' not in value
+                f.write('%s="%s"\n' % (key, value))
+
     def dump_all(self, d):
         for fn, data in self.db_.items():
             if data:
                 with open(os.path.join(d, fn), 'w', encoding='utf8') as f:
-                    if isinstance(data, set):
-                        for l in sorted(data):
-                            f.write('%s\n' % l)
-                    elif isinstance(data, dict):
-                        for key, values in sorted(data.items()):
-                            if isinstance(values, set): # package.use*
-                                if not values:
-                                    continue
-                                f.write('%s %s\n' % (key, ' '.join(sorted(values))))
-                            else: # make.defaults
-                                assert '"' not in values
-                                f.write('%s="%s"\n' % (key, values))
-                    else:
-                        raise NotImplementedError(pf)
+                    # call dump method
+                    self.db_dumps_[fn](f, data)

@@ -11,36 +11,33 @@ import profilewalker
 
 class RedundancyScanningProfile(profilewalker.CombinedProfile):
 	@staticmethod
-	def is_redundant(s, x):
-		if x.startswith('-'):
-			return x[1:] not in s
-		else:
-			return x in s
+	def is_redundant(d, x):
+		newv = not x.startswith('-')
+		if not newv:
+			x = x[1:]
+		if x not in d:
+			return False
+		return d[x] == newv
 
 	def handle_pkg(self, fn, p, path):
-		if self.is_redundant(self.db_.get(fn, ()), p):
+		if self.is_redundant(self.db_.get(fn, {}), p):
 			print('%s: %s' % (os.path.abspath(path), p))
 		super(RedundancyScanningProfile, self).handle_pkg(fn, p, path)
 
-	# TODO: use.stable* entries can use - to override package.use
-
 	def handle_use(self, fn, f, path):
-		if self.is_redundant(self.db_.get(fn, ()), f):
+		if self.is_redundant(self.db_.get(fn, {}), f):
 			print('%s: %s' % (os.path.abspath(path), f))
 		super(RedundancyScanningProfile, self).handle_use(fn, f, path)
 
-	# TODO: package.use entries require explicit -/+ status
-	# TODO: package.use.stable* entries can use - to override package.use
-
 	def handle_pkg_use(self, fn, pkg, f, path):
-		if self.is_redundant(self.db_.get(fn, {}).get(pkg, ()), f):
+		if self.is_redundant(self.db_.get(fn, {}).get(pkg, {}), f):
 			print('%s: %s %s' % (os.path.abspath(path), pkg, f))
 		super(RedundancyScanningProfile, self).handle_pkg_use(fn, pkg, f, path)
 
 	def handle_make_conf(self, fn, data, path):
 		for k, v in data.items():
 			if k in self.incr_vars:
-				oldv = self.db_.get(fn, {}).get(k, '').split()
+				oldv = self.db_.get(fn, {}).get(k, {})
 				for newv in v.split():
 					if self.is_redundant(oldv, newv):
 						print('%s: %s %s' % (os.path.abspath(path), k, newv))
