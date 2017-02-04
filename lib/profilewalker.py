@@ -124,6 +124,22 @@ def process_profile(profile_path, visitor, verbose=True, recursive=True):
                 raise
 
 
+def flag_to_str(k, v):
+    return '%s%s' % ('' if v else '-', k)
+
+
+class MakeConfDictWrapper(object):
+    def __init__(self, d):
+        self._d = d
+
+    def get(self, key, default=None):
+        v = self._d.get(key, default)
+        if isinstance(v, dict):
+            v = ' '.join(
+                flag_to_str(k, v) for k, v in sorted(v.items()))
+        return v
+
+
 class CombinedProfile(ProfileVisitor):
     incr_vars = ('USE', 'USE_EXPAND', 'USE_EXPAND_HIDDEN',
             'CONFIG_PROTECT', 'CONFIG_PROTECT_MASK', 'IUSE_IMPLICIT',
@@ -175,29 +191,25 @@ class CombinedProfile(ProfileVisitor):
                 self.db_[fn][k] = v
 
     def make_conf_dict(self, fn):
-        return self.db_.get(fn, {})
+        return MakeConfDictWrapper(self.db_.get(fn, {}))
 
     @staticmethod
-    def flag_to_str(k, v):
-        return '%s%s' % ('' if v else '-', k)
-
-    @classmethod
-    def dump_pkg_or_use(self, f, data):
+    def dump_pkg_or_use(f, data):
         for k, v in sorted(data.items()):
-            f.write('%s\n' % self.flag_to_str(k, v))
+            f.write('%s\n' % flag_to_str(k, v))
 
-    @classmethod
-    def dump_pkg_use(self, f, data):
+    @staticmethod
+    def dump_pkg_use(f, data):
         for key, flags in sorted(data.items()):
             f.write('%s %s\n' % (key, ' '.join(
-                self.flag_to_str(k, v) for k, v in sorted(flags.items()))))
+                flag_to_str(k, v) for k, v in sorted(flags.items()))))
 
-    @classmethod
-    def dump_make_conf(self, f, data):
+    @staticmethod
+    def dump_make_conf(f, data):
         for key, value in sorted(data.items()):
             if isinstance(value, dict):
                 f.write('%s="%s"\n' % (key, ' '.join(
-                    self.flag_to_str(k, v) for k, v in sorted(value.items()))))
+                    flag_to_str(k, v) for k, v in sorted(value.items()))))
             else:
                 assert '"' not in value
                 f.write('%s="%s"\n' % (key, value))
