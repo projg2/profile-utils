@@ -1,6 +1,6 @@
 #!/bin/bash
 
-profile_root=$(portageq envvar PORTDIR)/profiles
+profile_root=$(portageq get_repo_path / gentoo)/profiles
 profile_root=$(realpath "${profile_root}")
 
 profile_tree() {
